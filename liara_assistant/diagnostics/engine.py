@@ -164,7 +164,7 @@ async def health(ctx, app: str, url: str | None = None) -> dict:
             "unavailable_sources": ev["unavailable"]}
 
 
-async def verify(ctx, app: str, url: str | None = None, settle_sec: int = 20) -> dict:
+async def verify(ctx, app: str, url: str | None = None, settle_sec: int = 30) -> dict:
     """Re-check after a fix and compare with the saved baseline."""
     base = (ctx.state.get("baselines") or {}).get(app)
     since = (ctx.state.get("last_action_ts") or {}).get(app) or (base or {}).get("ts") or time.time() - 600
@@ -187,11 +187,22 @@ async def verify(ctx, app: str, url: str | None = None, settle_sec: int = 20) ->
     ev = await ev_mod.collect(ctx, app, minutes=minutes, url=url)
     new_logs = [line for line in ev["logs"] if (line["ts"] or 0) >= since - 5]
     new_errors = sig_mod.error_lines(new_logs)
+    # Liara's metrics lag behind (the summary still shows the old container right after a restart),
+    # so judge resources only from samples taken after the action; otherwise report them as "not updated yet".
+    ram_mb = (ev.get("plan") or {}).get("ram_mb")
+    fresh_mem = [v for t, v in ev["metrics"]["memory_series_mb"] if t >= since + 45]
+    fresh_cpu = [v for t, v in ev["metrics"]["cpu_series_pct"] if t >= since + 45]
+    mem_pct = round(100 * fresh_mem[-1] / ram_mb, 1) if fresh_mem and ram_mb else None
+    cpu_pct = fresh_cpu[-1] if fresh_cpu else None
     after = {"statuses": pr["statuses"], "median_ms": pr["median_ms"],
-             "memory_pct": ev["metrics"]["memory_pct_now"], "cpu_pct": ev["metrics"]["cpu_pct_now"],
+             "memory_pct": mem_pct, "cpu_pct": cpu_pct,
+             "metrics_summary_memory_pct": ev["metrics"]["memory_pct_now"],
              "new_error_lines": len(new_errors)}
+    if mem_pct is None and cpu_pct is None:
+        after["metrics_note"] = ("متریک‌های لیارا هنوز بعد از اقدام به‌روز نشده‌اند (چند دقیقه تأخیر دارند)؛ "
+                                 "چند دقیقه بعد دوباره check_health بزنید")
     healthy_http = pr["healthy"]
-    resources_ok = (after["memory_pct"] or 0) < 85 and (after["cpu_pct"] or 0) < 90
+    resources_ok = (mem_pct or 0) < 85 and (cpu_pct or 0) < 90
     if healthy_http and not new_errors and resources_ok:
         verdict, verdict_fa = "fixed", "✅ مشکل برطرف شد"
     elif healthy_http and (new_errors or not resources_ok):

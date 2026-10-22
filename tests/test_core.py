@@ -63,8 +63,8 @@ def test_logs_v2_sorted_and_ns_timestamps():
 
 def test_metric_normalisation():
     assert parse.memory_mb(256 * 1024 * 1024) == 256
-    assert parse.cpu_percent(0.25, 0.5) == 50.0
-    assert parse.cpu_percent(73.0, 1) == 73.0
+    assert parse.cpu_percent(75.0, 0.5) == 50.0     # 75 CPU-seconds in 5 min = 0.25 cores = 50% of 0.5
+    assert parse.cpu_percent(0.66, 0.5) == 0.4      # idle Node app plateau seen on Liara
 
 
 def test_redact():
@@ -143,3 +143,16 @@ async def test_diagnose_memory_pressure_proposes_resize():
     tools = [a["tool"] for a in top["proposed_actions"]]
     assert tools == ["restart_app", "resize_app"]
     assert top["proposed_actions"][1]["args"]["plan_id"] == "g2-mars"
+
+
+def test_restart_newest_container_wins():
+    """Shape observed on a live app: the old container keeps reporting its last RAM for minutes after a
+    restart, so applets must not be summed."""
+    t0 = 1_800_000_000
+    mb = 1024 * 1024
+    memory = {"result": [
+        {"applet": "old", "values": [[t0 + i * 60, str(v * mb)] for i, v in enumerate([58, 460, 459, 430, 430, 430])]},
+        {"applet": "new", "values": [[t0 + i * 60, str(v * mb)] for i, v in [(4, 30), (5, 31)]]},
+    ]}
+    cur = parse.current_series(memory)
+    assert [round(v / mb) for _, v in cur] == [58, 460, 459, 430, 30, 31]

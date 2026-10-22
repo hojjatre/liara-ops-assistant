@@ -145,3 +145,21 @@ async def test_secret_is_collected_by_ui_and_never_reaches_llm(tmp_path):
     seen_by_llm = json.dumps([[m.content for m in msgs] for msgs in llm.seen], ensure_ascii=False)
     assert "topsecret" not in seen_by_llm
     assert "topsecret" not in (tmp_path / "audit.jsonl").read_text(encoding="utf-8")
+
+
+@respx.mock
+async def test_create_app_uses_network_and_checks_bundle(tmp_path):
+    from liara_assistant.tools.liara_tools import create_app
+    respx.get(f"{API}/v1/me").mock(return_value=httpx.Response(200, json=F.ME))
+    nets = respx.get(f"{API}/v1/networks").mock(side_effect=[
+        httpx.Response(200, json={"networks": []}),
+        httpx.Response(200, json={"networks": [{"_id": "n1", "name": "default-net"}]})])
+    mk = respx.post(f"{API}/v1/networks").mock(return_value=httpx.Response(201, json={}))
+    create = respx.post(f"{API}/v1/projects").mock(return_value=httpx.Response(200, json={}))
+    ctx, *_ = setup(tmp_path, [])
+    bad = await create_app(ctx, "demo-shop", "g2-earth", "node", "gold")
+    assert "available_bundles" in bad and create.call_count == 0
+    ok = await create_app(ctx, "demo-shop", "g2-earth", "node", "basic")
+    assert mk.call_count == 1 and json.loads(mk.calls.last.request.content) == {"networkName": "default-net"}
+    body = json.loads(create.calls.last.request.content)
+    assert body["network"] == "n1" and body["bundlePlanID"] == "basic" and ok["network"] == "default-net"

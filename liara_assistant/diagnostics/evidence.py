@@ -61,6 +61,30 @@ def parse_events(data: Any) -> list[dict]:
     return out
 
 
+def usage_from(summary: dict, memory: dict | None, cpu: dict | None, cores: float | None):
+    """Memory (MB) and CPU (% of plan) series + current values, preferring the newest container's series."""
+    mem_series = [(t, parse.memory_mb(v)) for t, v in parse.current_series(memory or {})]
+    cpu_series = [(t, parse.cpu_percent(v, cores)) for t, v in parse.current_series(cpu or {})]
+    mem_now = mem_series[-1][1] if mem_series else parse.memory_mb(parse.summary_value(summary.get("memoryUsage")))
+    cpu_now = cpu_series[-1][1] if cpu_series else \
+        parse.cpu_percent(parse.summary_value(summary.get("cpuUsage")), cores)
+    return mem_series, cpu_series, mem_now, cpu_now
+
+
+async def usage_now(ctx, app: str, cores: float | None, minutes: int = 10) -> dict:
+    now = int(time.time())
+    summary, mem, cpu = await asyncio.gather(
+        _safe(ctx.client.metrics_summary(app)),
+        _safe(ctx.client.metrics_series(app, "memory", now - minutes * 60)),
+        _safe(ctx.client.metrics_series(app, "cpu", now - minutes * 60)))
+    summary = summary if isinstance(summary, dict) else {}
+    mem = mem if isinstance(mem, dict) else None
+    cpu = cpu if isinstance(cpu, dict) else None
+    _, _, mem_now, cpu_now = usage_from(summary, mem, cpu, cores)
+    return {"memory_mb": round(mem_now, 1) if mem_now is not None else None, "cpu_pct": cpu_now,
+            "disks": parse.disk_usage(summary.get("disksUsage"))}
+
+
 async def collect(ctx, app: str, minutes: int = 60, url: str | None = None) -> dict:
     now = int(time.time())
     start = now - minutes * 60
@@ -88,10 +112,7 @@ async def collect(ctx, app: str, minutes: int = 60, url: str | None = None) -> d
     cores = plan.get("cpu_cores")
 
     summary = ok.get("summary") or {}
-    mem_now = parse.memory_mb(parse.summary_value(summary.get("memoryUsage")))
-    cpu_now = parse.cpu_percent(parse.summary_value(summary.get("cpuUsage")), cores)
-    mem_series = [(t, parse.memory_mb(v)) for t, v in parse.series(ok.get("memory") or {})]
-    cpu_series = [(t, parse.cpu_percent(v, cores)) for t, v in parse.series(ok.get("cpu") or {})]
+    mem_series, cpu_series, mem_now, cpu_now = usage_from(summary, ok.get("memory"), ok.get("cpu"), cores)
 
     logs = ok.get("logs") or []
     for line in logs:

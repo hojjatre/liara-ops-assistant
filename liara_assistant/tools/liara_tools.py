@@ -13,7 +13,7 @@ from pydantic import Field
 from .. import plans as plans_mod
 from ..deploy import packager, pipeline
 from ..diagnostics import engine
-from ..diagnostics.evidence import fetch_logs, get_plans, parse_events
+from ..diagnostics.evidence import fetch_logs, get_plans, parse_events, usage_now
 from ..diagnostics.signals import error_lines, top_errors
 from ..liara import parse
 from ..liara.client import LiaraError
@@ -62,15 +62,15 @@ async def get_app_status(ctx: Ctx, app: App) -> dict:
     try:
         plans = await get_plans(ctx)
         plan = parse.plan_by_id(plans, info.get("plan_id")) or {}
-        s = await ctx.client.metrics_summary(app)
-        mem = parse.memory_mb(parse.summary_value(s.get("memoryUsage")))
+        use = await usage_now(ctx, app, plan.get("cpu_cores"))
+        mem = use["memory_mb"]
         out["resources"] = {
             "plan": {"id": plan.get("id"), "ram_gb": plan.get("ram_gb"), "cpu_cores": plan.get("cpu_cores"),
                      "monthly_toman": plan.get("monthly_toman")},
-            "memory_mb": round(mem, 1) if mem is not None else None,
+            "memory_mb": mem,
             "memory_pct": round(100 * mem / (plan["ram_gb"] * 1024), 1) if mem and plan.get("ram_gb") else None,
-            "cpu_pct": parse.cpu_percent(parse.summary_value(s.get("cpuUsage")), plan.get("cpu_cores")),
-            "disks": parse.disk_usage(s.get("disksUsage")),
+            "cpu_pct": use["cpu_pct"],
+            "disks": use["disks"],
         }
     except LiaraError as e:
         out["resources_error"] = e.friendly
@@ -458,10 +458,23 @@ async def _plan_cost(ctx: Ctx, plan_id: str) -> dict | None:
     return parse.plan_by_id(await get_plans(ctx), plan_id)
 
 
+async def _pick_network(ctx: Ctx, wanted: str | None) -> tuple[dict | None, str]:
+    """Liara's new-generation (g2) apps run inside a private network; the official CLI always sends one."""
+    networks = await ctx.client.list_networks()
+    if wanted:
+        net = next((n for n in networks if n.get("name") == wanted), None)
+        return net, (f"شبکه «{wanted}»" if net else f"شبکه «{wanted}» ساخته می‌شود")
+    if networks:
+        return networks[0], f"شبکه موجود «{networks[0].get('name')}»"
+    return None, "شبکه خصوصی «default-net» ساخته می‌شود (برای پلن‌های نسل جدید لازم است)"
+
+
 async def _create_impact(ctx: Ctx, a: dict) -> dict:
     p = await _plan_cost(ctx, a.get("plan_id", ""))
     cost = f"حدود {p['monthly_toman']:,} تومان در ماه ({p['ram_gb']}GB رم، {p['cpu_cores']} هسته)" if p else "نامشخص"
+    _, net_note = await _pick_network(ctx, a.get("network"))
     return {"cost": cost + f" + بسته ویژگی {a.get('bundle_plan_id') or 'پیش‌فرض'}",
+            "note": net_note,
             "rollback": "برنامه را می‌توان از کنسول حذف کرد"}
 
 
@@ -473,13 +486,32 @@ async def create_app(
     plan_id: Annotated[str, Field(description="Hardware plan id from list_plans/recommend_plan")],
     platform: Annotated[str, Field(description="node, next, react, vue, angular, static, django, flask, "
                                                "python, laravel, php, go, dotnet, docker")],
-    bundle_plan_id: Annotated[str | None, Field(description="Feature bundle: free, basic, standard, pro")] = None,
+    bundle_plan_id: Annotated[str | None, Field(description="Feature bundle: free, basic, standard, pro "
+                                                            "(must be one of the plan's available bundles)")] = None,
+    network: Annotated[str | None, Field(description="Private network name; default: the first existing network, "
+                                                     "or a new 'default-net'")] = None,
 ) -> dict:
-    """Create a new app on Liara (costs money)."""
+    """Create a new app on Liara (costs money). New-generation (g2) plans need a private network; one is picked
+    or created automatically."""
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{2,30}", name):
         return {"error": "نام برنامه فقط حروف کوچک انگلیسی، عدد و خط تیره (۳ تا ۳۱ کاراکتر)"}
-    res = await ctx.client.create_app(name, plan_id, platform, bundle_plan_id)
-    return {"created": name, "url": default_url(name), "response": res}
+    plan = parse.plan_by_id(await get_plans(ctx), plan_id)
+    if plan and bundle_plan_id and plan.get("bundles") and bundle_plan_id not in plan["bundles"]:
+        return {"error": f"بسته «{bundle_plan_id}» برای پلن {plan_id} در دسترس نیست",
+                "available_bundles": list(plan["bundles"])}
+    net, _ = await _pick_network(ctx, network)
+    if net is None:
+        await ctx.report("🌐 ساخت شبکه خصوصی برای برنامه")
+        await ctx.client.create_network(network or "default-net")
+        net, _ = await _pick_network(ctx, network or "default-net")
+    res = await ctx.client.create_app(name, plan_id, platform, bundle_plan_id, network=(net or {}).get("_id"))
+    return {"created": name, "network": (net or {}).get("name"), "url": default_url(name), "response": res}
+
+
+@tool(Risk.READ, "فهرست شبکه‌ها")
+async def list_networks(ctx: Ctx) -> dict:
+    """List private networks in the account (apps on new-generation plans are created inside one)."""
+    return {"networks": [{"id": n.get("_id"), "name": n.get("name")} for n in await ctx.client.list_networks()]}
 
 
 @tool(Risk.HIGH, "ری‌استارت برنامه",

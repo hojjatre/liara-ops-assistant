@@ -34,6 +34,9 @@ def recommend(me: dict, platform: str, daily_visitors: int = 500, has_database_w
     fitting = [p for p in candidates if (p["ram_gb"] or 0) >= need and p["id"] != "free"]
     pick = fitting[0] if fitting else (candidates[-1] if candidates else None)
     bundle = feature_bundle or ("standard" if daily_visitors > 10_000 else "basic")
+    offered = list(((pick or {}).get("bundles") or {}).keys())
+    if offered and bundle not in offered:  # only bundles Liara marks as available for this plan
+        bundle = "basic" if "basic" in offered else offered[0]
     reasons = [
         f"پلتفرم «{platform}» با حدود {daily_visitors:,} بازدید روزانه حداقل {need:g}GB رم نیاز دارد",
     ]
@@ -48,6 +51,7 @@ def recommend(me: dict, platform: str, daily_visitors: int = 500, has_database_w
             "tier_fa": TIER_FA.get(pick["ram_gb"] or 0, ""),
             "bundle_plan_id": bundle,
             "bundle_monthly_toman": (pick.get("bundles") or {}).get(bundle),
+            "available_bundles": offered,
         },
         "needed_ram_gb": need,
         "reasons": reasons,

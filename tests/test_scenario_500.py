@@ -50,3 +50,18 @@ async def test_http_500_full_loop(tmp_path, monkeypatch):
     assert verify["verdict"] == "fixed", verify
     assert verify["before"]["error_count"] > 0 and verify["after"]["new_error_lines"] == 0
     assert out["messages"][-1].content.startswith("✅")
+
+
+@respx.mock
+async def test_verify_ignores_stale_metrics_after_restart(monkeypatch):
+    """Right after a restart Liara's summary still reports the old container's RAM; don't call that a failure."""
+    import time as _t
+    from .test_core import make_ctx
+    monkeypatch.setattr(engine, "_sleep", _nosleep)
+    _mock_app(470 * 1024 * 1024, {"data": []}, release_minutes_ago=600, probe_status=200)
+    ctx = make_ctx()
+    ctx.state["last_action_ts"] = {"demo-shop": _t.time()}
+    res = await engine.verify(ctx, "demo-shop")
+    assert res["verdict"] == "fixed", res
+    assert res["after"]["memory_pct"] is None and res["after"]["metrics_summary_memory_pct"] > 85
+    assert "metrics_note" in res["after"]

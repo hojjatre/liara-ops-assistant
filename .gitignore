@@ -8,3 +8,5 @@ __pycache__/
 .chainlit/translations/
 *.tar.gz
 node_modules/
+.idea/
+*.zip

@@ -9,7 +9,7 @@ Built for the StarCoach Agentic AI hackathon, Liara challenge, by team **Human i
 > بررسی می‌کند. اقدامات حساس (ری‌استارت، تغییر پلن، دیپلوی، متغیرهای محیطی) فقط با تأیید شما انجام می‌شوند و حذف
 > منابع کاملاً مسدود است.
 
-🎥 **Demo video:** _add link here_ · 📄 **Design doc:** [docs/implementation-plan.md](docs/implementation-plan.md)
+🎥 **Demo video:** _add link here_ · 📄 **Design doc:** [docs/implementation-plan.md](docs/implementation-plan.md) · 🧪 **Live test report:** [docs/test-report.md](docs/test-report.md)
 
 ---
 
@@ -90,7 +90,7 @@ flowchart LR
 | Purpose | Endpoint |
 |---|---|
 | Account, plan catalogue | `GET /v1/me`, `GET /v1/me/free-credit`, `GET /v1/billing` |
-| Apps | `GET/POST /v1/projects`, `GET /v1/projects/{name}` |
+| Apps | `GET/POST /v1/projects` (`{name, planID, platform, bundlePlanID, network}`), `GET /v1/projects/{name}`, `GET/POST /v1/networks` |
 | Actions | `POST /v1/projects/{name}/actions/restart`, `.../actions/scale` `{scale: 0/1}`, `POST /v1/projects/{name}/resize` `{planID}` |
 | Settings | `POST /v1/projects/update-envs` (full list: the assistant merges with existing envs), `POST /v1/projects/update-port`, `POST /v1/projects/{id}/zero-downtime/{enable/disable}` |
 | Deploy | `POST /v2/projects/{name}/sources` (multipart .tar.gz, ≤256 MiB) → `POST /v2/projects/{name}/releases` → `GET /v2/releases/{id}/build-logs?since=` + `GET /v1/releases/{id}` |
@@ -103,8 +103,13 @@ flowchart LR
 * **Registrars (nic.ir) have no API.** The nameserver change is a manual step; the assistant gives exact values and re-checks.
 * **Liara metrics are CPU / RAM / network / disk only.** There are no request-latency or HTTP-status metrics, so the
   assistant uses its own HTTP probe and log analysis.
-* **Metric units aren't documented.** Values are treated as Prometheus-style (memory in bytes, CPU in cores).
-  `scripts/smoke_test.py` prints raw samples so this can be checked against the console.
+* **Metric units aren't documented.** From a live app we observed: memory is in bytes per container; CPU is
+  CPU-seconds over a trailing 5-minute window (cores = value / 300); and after a restart the old container keeps
+  reporting its last value for a few minutes. The assistant therefore reads the newest container's series and
+  judges a fix only from samples taken after the action. `scripts/smoke_test.py` prints raw samples to re-check.
+* **New-generation (g2) plans need a private network,** and not every feature bundle is offered for every plan
+  (e.g. no `free` bundle on `small-g2`). The assistant picks or creates a network and only offers available bundles.
+* **Health-check limits:** Liara rejects `healthCheck.startPeriod` above 3000; the demo uses the documented values.
 * **Log retention depends on the feature bundle** (Free: last hour), so older evidence may be missing.
 * **Scaling is vertical only** (plan resize) plus on/off. There is no autoscaling API.
 * **Rollback** isn't in the official OpenAPI spec (`/v2/projects/{app}/releases/{id}/rollback` is used by a

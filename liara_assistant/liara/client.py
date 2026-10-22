@@ -146,6 +146,14 @@ class LiaraClient:
             body["readOnlyRootFilesystem"] = read_only_root_fs
         return await self.post("v1/projects", json=body)
 
+    async def list_networks(self) -> list[dict]:
+        data = await self.get("v1/networks")
+        return data.get("networks", []) if isinstance(data, dict) else (data or [])
+
+    async def create_network(self, name: str) -> dict:
+        # same body the official CLI sends (`liara network create`)
+        return await self.post("v1/networks", json={"networkName": name})
+
     async def restart_app(self, name: str) -> dict:
         return await self.post(f"v1/projects/{name}/actions/restart")
 

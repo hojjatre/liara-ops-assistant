@@ -19,6 +19,7 @@ from liara_assistant.agent.llm import make_llm
 from liara_assistant.config import Settings
 from liara_assistant.deploy.packager import PackagingError, extract_zip
 from liara_assistant.diagnostics import engine
+from liara_assistant.diagnostics.evidence import usage_now
 from liara_assistant.liara import parse
 from liara_assistant.liara.client import LiaraClient, LiaraError
 from liara_assistant.policy import AuditLog, card_markdown, safe_args
@@ -218,14 +219,13 @@ async def status_markdown(ctx: Ctx, app: str) -> str:
         info = parse.app_summary(await ctx.client.get_app(app))
         lines.append(f"- وضعیت: {'🟢 روشن' if info['running'] else '🔴 خاموش'} · پلتفرم `{info['platform']}` · "
                      f"پلن `{info['plan_id']}`")
-        s = await ctx.client.metrics_summary(app)
-        mem = parse.memory_mb(parse.summary_value(s.get("memoryUsage")))
         cache = (ctx.state.get("cache") or {}).get("plans")
         plan = parse.plan_by_id(cache[1], info["plan_id"]) if cache else None
+        use = await usage_now(ctx, app, plan and plan.get("cpu_cores"))
+        mem, cpu = use["memory_mb"], use["cpu_pct"]
         if mem is not None:
             pct = f" ({round(100 * mem / (plan['ram_gb'] * 1024))}%)" if plan and plan.get("ram_gb") else ""
             lines.append(f"- رم: {round(mem)}MB{pct}")
-        cpu = parse.cpu_percent(parse.summary_value(s.get("cpuUsage")), plan and plan.get("cpu_cores"))
         if cpu is not None:
             lines.append(f"- CPU: {cpu}%")
     except LiaraError as e:
@@ -263,32 +263,56 @@ async def refresh_sidebar():
 
 
 # ------------------------------------------------------------------ monitoring
+MONITOR_LOG = "data/monitor.log"
+
+
+def _mlog(msg: str) -> None:
+    try:
+        with open(MONITOR_LOG, "a", encoding="utf-8") as fh:
+            fh.write(f"{time.strftime('%Y-%m-%dT%H:%M:%S')} {msg}\n")
+    except OSError:
+        pass
+
+
 async def monitor_loop():
+    _mlog("monitor started")
     while True:
         await asyncio.sleep(SETTINGS.monitor_interval_sec)
-        ctx: Ctx | None = cl.user_session.get("ctx")
-        if not ctx or not ctx.state.get("watch"):
-            continue
-        alerts: dict = cl.user_session.get("alerts")
-        for app, cfg in list(ctx.state["watch"].items()):
-            try:
-                h = await engine.health(ctx, app, cfg.get("url"))
-            except Exception:  # noqa: BLE001
-                continue
-            crit = [i for i in h["issues"] if i["severity"] == "critical"]
-            if crit and time.time() - alerts.get(app, 0) > 600:
-                alerts[app] = time.time()
-                issues = "؛ ".join(i["title_fa"] for i in crit)
-                await cl.Message(
-                    content=f"🚨 **هشدار پایش — {app}**\n\n{issues}",
-                    actions=[cl.Action(name="diagnose", payload={"app": app, "issues": issues},
-                                       label="🔍 عیب‌یابی کن")],
-                    author="Monitor",
-                ).send()
         try:
-            await refresh_sidebar()
-        except Exception:  # noqa: BLE001
-            pass
+            await monitor_tick()
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001 - never let the monitor die silently
+            import traceback
+            _mlog(f"tick failed: {type(e).__name__}: {e}\n{traceback.format_exc()}")
+
+
+async def monitor_tick():
+    ctx: Ctx | None = cl.user_session.get("ctx")
+    if not ctx or not ctx.state.get("watch"):
+        _mlog(f"tick: ctx={'yes' if ctx else 'no'} watch={list((ctx.state.get('watch') or {}).keys()) if ctx else []}")
+        return
+    alerts: dict = cl.user_session.get("alerts")
+    for app, cfg in list(ctx.state["watch"].items()):
+        try:
+            h = await engine.health(ctx, app, cfg.get("url"))
+        except Exception as e:  # noqa: BLE001
+            _mlog(f"{app}: health failed: {type(e).__name__}: {e}")
+            continue
+        found = h["issues"]  # warning + critical
+        _mlog(f"{app}: healthy={h['healthy']} issues={[i['id'] for i in found]} metrics={h['metrics']}")
+        if found and time.time() - alerts.get(app, 0) > 600:
+            alerts[app] = time.time()
+            issues = "؛ ".join(i["title_fa"] for i in found)
+            icon = "🚨" if any(i["severity"] == "critical" for i in found) else "⚠️"
+            await cl.Message(
+                content=f"{icon} **هشدار پایش — {app}**\n\n{issues}",
+                actions=[cl.Action(name="diagnose", payload={"app": app, "issues": issues},
+                                   label="🔍 عیب‌یابی کن")],
+                author="Monitor",
+            ).send()
+            _mlog(f"{app}: alert sent")
+    await refresh_sidebar()
 
 
 __all__ = ["RISK_FA", "Risk"]

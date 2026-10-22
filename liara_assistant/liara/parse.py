@@ -1,10 +1,10 @@
 """Helpers that turn raw Liara API responses into compact, typed summaries.
 
-Metric units are not documented in the OpenAPI spec. The responses look like
-Prometheus results ([unix_ts, "value"]), so we assume:
-  * memory  -> bytes   (converted to MB here)
-  * cpu     -> cores in use (converted to % of the plan's cores)
-`scripts/smoke_test.py` prints raw samples so this can be checked against a real app.
+Metric units are not documented in the OpenAPI spec. Responses look like Prometheus results
+([unix_ts, "value"]); see the notes above `series_by_applet` for what was observed on a live app:
+  * memory -> bytes (converted to MB here)
+  * cpu    -> CPU-seconds over a trailing 5-minute window (converted to % of the plan's cores)
+`scripts/smoke_test.py` prints raw samples so this can be re-checked against a real app.
 """
 from __future__ import annotations
 
@@ -104,6 +104,41 @@ def _ts_seconds(v: Any) -> float | None:
 
 
 # ---------------------------------------------------------------- metrics
+# Observed on a live app (Oct 2026):
+#  * each container ("applet") is its own series; after a restart the old container's series keeps being
+#    reported with its last value for a few minutes, so summing applets double-counts memory;
+#  * CPU values are CPU-seconds consumed over a trailing 5-minute window: after a restart they climb
+#    linearly for ~5 minutes and then plateau (an idle Node app plateaus around 0.6-0.7). Cores in use =
+#    value / 300. Check with `scripts/smoke_test.py` if Liara changes this.
+CPU_WINDOW_SEC = 300
+def series_by_applet(data: dict) -> dict[str, list[tuple[float, float]]]:
+    out: dict[str, list[tuple[float, float]]] = {}
+    for i, r in enumerate((data or {}).get("result", []) or []):
+        pts = []
+        for pair in r.get("values", []) or []:
+            if len(pair) < 2:
+                continue
+            ts, val = _ts_seconds(pair[0]), to_float(pair[1])
+            if ts is not None and val is not None:
+                pts.append((ts, val))
+        if pts:
+            out[str(r.get("applet") or i)] = sorted(pts)
+    return out
+
+
+def current_series(data: dict) -> list[tuple[float, float]]:
+    """One value per timestamp, taken from the newest container that reported at that time."""
+    by = series_by_applet(data)
+    first_seen = {a: p[0][0] for a, p in by.items() if p}
+    acc: dict[float, tuple[float, float]] = {}
+    for a, pts in by.items():
+        for t, v in pts:
+            cur = acc.get(t)
+            if cur is None or first_seen[a] > cur[0]:
+                acc[t] = (first_seen[a], v)
+    return sorted((t, v) for t, (_, v) in acc.items())
+
+
 def series(data: dict) -> list[tuple[float, float]]:
     """Reports {result: [{values: [[ts, v]...], applet}]} -> [(ts, summed value)] across applets."""
     acc: dict[float, float] = {}
@@ -138,11 +173,13 @@ def memory_mb(raw: float | None) -> float | None:
 
 
 def cpu_percent(raw: float | None, plan_cores: float | None) -> float | None:
+    """CPU-seconds over the trailing window -> % of the plan's cores."""
     if raw is None:
         return None
-    if plan_cores and raw <= plan_cores * 2:  # looks like cores in use
-        return round(100 * raw / plan_cores, 1)
-    return round(raw, 1)  # already a percentage
+    cores_used = raw / CPU_WINDOW_SEC
+    if plan_cores:
+        return round(100 * cores_used / plan_cores, 1)
+    return round(100 * cores_used, 1)
 
 
 def disk_usage(items: list[dict] | None) -> list[dict]:
@@ -176,7 +213,8 @@ def plans(me: dict) -> list[dict]:
             "monthly_toman": round(hourly * 720),
             "available": bool(p.get("available", True)),
             "region": p.get("region"),
-            "bundles": {k: (v or {}).get("displayPrice") for k, v in b.items() if isinstance(v, dict)},
+            "bundles": {k: (v or {}).get("displayPrice") for k, v in b.items()
+                        if isinstance(v, dict) and v.get("available", True)},
         })
     out.sort(key=lambda x: (x["ram_gb"] or 0, x["cpu_cores"] or 0))
     return out
