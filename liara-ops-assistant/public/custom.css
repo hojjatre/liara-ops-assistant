@@ -1,0 +1,21 @@
+/* Persian (RTL) layout for chat content; code stays LTR */
+@import url("https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;600;700&display=swap");
+
+body, .prose, textarea, button { font-family: "Vazirmatn", Tahoma, sans-serif; }
+
+.prose, .message-content, [class*="markdown"] {
+  direction: rtl;
+  text-align: right;
+}
+
+.prose pre, .prose code, pre, code {
+  direction: ltr;
+  text-align: left;
+}
+
+textarea#chat-input, #chat-input {
+  direction: rtl;
+  text-align: right;
+}
+
+.prose ul, .prose ol { padding-right: 1.25rem; padding-left: 0; }
