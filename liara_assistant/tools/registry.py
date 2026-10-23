@@ -28,11 +28,11 @@ class Risk(str, Enum):
 
 
 RISK_FA = {
-    Risk.READ: "🟢 فقط‌خواندنی",
-    Risk.LOW: "🔵 کم‌ریسک",
-    Risk.MEDIUM: "🟡 نیازمند تأیید",
-    Risk.HIGH: "🔴 حساس — نیازمند تأیید",
-    Risk.BLOCKED: "⛔ مسدود",
+    Risk.READ: "فقط‌خواندنی",
+    Risk.LOW: "کم‌ریسک",
+    Risk.MEDIUM: "نیازمند تأیید",
+    Risk.HIGH: "حساس — نیازمند تأیید",
+    Risk.BLOCKED: "مسدود",
 }
 
 ProgressFn = Callable[[str], Awaitable[None]]

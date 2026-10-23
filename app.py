@@ -22,9 +22,11 @@ from liara_assistant.diagnostics import engine
 from liara_assistant.diagnostics.evidence import usage_now
 from liara_assistant.liara import parse
 from liara_assistant.liara.client import LiaraClient, LiaraError
-from liara_assistant.policy import AuditLog, card_markdown, safe_args
+from liara_assistant.policy import AuditLog, safe_args
 from liara_assistant.probe import default_url, probe
-from liara_assistant.tools.registry import RISK_FA, Ctx, Risk
+from liara_assistant.tools.registry import REGISTRY, RISK_FA, Ctx, Risk
+
+TEAM = "Human in the Liara"
 
 SETTINGS = Settings.from_env()
 CHECKPOINTER = InMemorySaver()
@@ -42,10 +44,14 @@ def graph():
 @cl.set_starters
 async def starters():
     return [
-        cl.Starter(label="برنامه‌های من", message="برنامه‌های من روی لیارا را با وضعیتشان نشان بده."),
-        cl.Starter(label="سایتم خطای ۵۰۰ می‌دهد", message="سایتم خطای 500 می‌دهد. بررسی کن مشکل چیست."),
-        cl.Starter(label="سایتم کند شده", message="سایتم خیلی کند شده. علتش را پیدا کن."),
-        cl.Starter(label="دیپلوی پروژه", message="می‌خواهم پروژه‌ام را روی لیارا دیپلوی کنم."),
+        cl.Starter(label="برنامه‌های من", message="برنامه‌های من روی لیارا را با وضعیتشان نشان بده.",
+                   icon="/public/icons/server.svg"),
+        cl.Starter(label="سایتم خطای ۵۰۰ می‌دهد", message="سایتم خطای 500 می‌دهد. بررسی کن مشکل چیست.",
+                   icon="/public/icons/alert.svg"),
+        cl.Starter(label="سایتم کند شده", message="سایتم خیلی کند شده. علتش را پیدا کن.",
+                   icon="/public/icons/gauge.svg"),
+        cl.Starter(label="دیپلوی پروژه", message="می‌خواهم پروژه‌ام را روی لیارا دیپلوی کنم.",
+                   icon="/public/icons/rocket.svg"),
     ]
 
 
@@ -54,7 +60,7 @@ async def starters():
 async def start():
     missing = SETTINGS.missing()
     if missing:
-        await cl.Message(content="⚠️ تنظیمات کامل نیست. این متغیرها را در فایل `.env` قرار دهید و برنامه را "
+        await cl.Message(content="تنظیمات کامل نیست. این متغیرها را در فایل `.env` قرار دهید و برنامه را "
                                  f"دوباره اجرا کنید: `{', '.join(missing)}`").send()
         return
     client = LiaraClient(SETTINGS.liara_api_token, SETTINGS.liara_team_id, SETTINGS.liara_api_url,
@@ -97,7 +103,7 @@ async def on_message(msg: cl.Message):
                 ctx.state.setdefault("uploads", []).append(str(folder))
                 text += f"\n\n[کاربر پروژه‌ای آپلود کرد؛ مسیر محلی: {folder}]"
             except (PackagingError, OSError) as e:
-                await cl.Message(content=f"❌ فایل zip باز نشد: {e}").send()
+                await cl.Message(content=f"فایل zip باز نشد: {e}").send()
     await run_turn(text)
 
 
@@ -150,28 +156,42 @@ async def run_turn(text: str) -> None:
 
 
 async def ask_secret(key: str) -> str | None:
-    """Collect a secret directly from the user. The value goes to Liara only, never to the LLM or the logs."""
-    res = await cl.AskUserMessage(
-        content=f"🔐 مقدار `{key}` را وارد کنید. این مقدار فقط به لیارا ارسال می‌شود و به مدل زبانی یا گزارش‌ها "
-                "نمی‌رسد.",
-        timeout=600,
+    """Collect a secret in a private input card. The value goes to Liara only: it is never posted as a chat
+    message, sent to the LLM or written to the logs."""
+    ask = cl.AskElementMessage(
+        content="",
+        element=cl.CustomElement(name="SecretInput", props={"name": key}, display="inline"),
         author="Secure input",
-    ).send()
-    return (res or {}).get("output")
+        timeout=600,
+    )
+    res = await ask.send()
+    value = res.get("value") if res and res.get("submitted") else None
+    ask.content = f"مقدار `{key}` به‌صورت امن ثبت شد." if value else f"ورود مقدار `{key}` لغو شد."
+    await ask.update()
+    return value
+
+
+def _card_props(card: dict) -> dict:
+    return {"title": card["title"], "risk": card["risk"], "action": card["action"], "reason": card.get("reason"),
+            "impact": card.get("impact") or {}, "tool": card["tool"], "args": card.get("args") or {}}
 
 
 async def ask_approval(card: dict) -> dict:
-    await cl.Message(content=card_markdown(card), author="Approval").send()
-    res = await cl.AskActionMessage(
-        content="آیا این اقدام انجام شود؟",
-        actions=[
-            cl.Action(name="approve", payload={"v": "yes"}, label="✅ تأیید و اجرا"),
-            cl.Action(name="reject", payload={"v": "no"}, label="❌ رد"),
-        ],
+    props = _card_props(card)
+    ask = cl.AskElementMessage(
+        content="",
+        element=cl.CustomElement(name="ApprovalCard", props=props, display="inline"),
+        author="Approval",
         timeout=900,
-    ).send()
-    approved = bool(res and (res.get("payload") or {}).get("v") == "yes")
-    note = "" if approved else ("زمان پاسخ تمام شد" if res is None else "")
+    )
+    res = await ask.send()
+    approved = bool(res and res.get("submitted") and res.get("approved"))
+    note = "" if approved else ("زمان پاسخ تمام شد؛ اقدامی انجام نشد" if res is None else "")
+    ask.content = ""
+    await ask.update()
+    decided = cl.CustomElement(name="ApprovalCard", display="inline",
+                               props={**props, "decided": "approved" if approved else "rejected", "note": note})
+    await decided.send(for_id=ask.id)
     return {"approved": approved, "note": note}
 
 
@@ -196,47 +216,41 @@ async def tool_end(step, spec, result, status, seconds):
     ctx.progress = None
     if step is None:
         return
-    icon = {"ok": "✅", "error": "❌"}.get(status, "•")
     summary = json.dumps(result, ensure_ascii=False, default=str, indent=1)
     if len(summary) > 3500:
         summary = summary[:3500] + "\n…"
     prefix = step.output + "\n" if step.output else ""
-    step.output = f"{prefix}{icon} {spec.risk.value} · {seconds}s\n```json\n{summary}\n```"
-    step.name = f"{icon} {spec.title_fa}"
+    state = "موفق" if status == "ok" else "خطا"
+    step.output = f"{prefix}{state} · ریسک {spec.risk.value} · {seconds} ثانیه\n```json\n{summary}\n```"
+    step.name = spec.title_fa if status == "ok" else f"{spec.title_fa} — خطا"
     await step.update()
 
 
 async def tool_skipped(spec, args, status):
     title = spec.title_fa if spec else "?"
-    text = "⛔ مسدود شد (سیاست امنیتی)" if status == "blocked" else "❌ توسط شما رد شد"
-    await cl.Message(content=f"{text}: {title}", author="Policy").send()
+    text = "طبق سیاست امنیتی مسدود شد" if status == "blocked" else "توسط شما رد شد؛ اجرا نشد"
+    await cl.Message(content=f"**{title}** — {text}", author="Policy").send()
 
 
 # ------------------------------------------------------------------ status sidebar
-async def status_markdown(ctx: Ctx, app: str) -> str:
-    lines = [f"## 📊 {app}"]
+async def app_status(ctx: Ctx, app: str) -> dict:
+    out: dict = {"name": app, "watching": app in (ctx.state.get("watch") or {})}
     try:
         info = parse.app_summary(await ctx.client.get_app(app))
-        lines.append(f"- وضعیت: {'🟢 روشن' if info['running'] else '🔴 خاموش'} · پلتفرم `{info['platform']}` · "
-                     f"پلن `{info['plan_id']}`")
+        out.update(running=info["running"], platform=info["platform"], plan=info["plan_id"])
         cache = (ctx.state.get("cache") or {}).get("plans")
         plan = parse.plan_by_id(cache[1], info["plan_id"]) if cache else None
         use = await usage_now(ctx, app, plan and plan.get("cpu_cores"))
-        mem, cpu = use["memory_mb"], use["cpu_pct"]
-        if mem is not None:
-            pct = f" ({round(100 * mem / (plan['ram_gb'] * 1024))}%)" if plan and plan.get("ram_gb") else ""
-            lines.append(f"- رم: {round(mem)}MB{pct}")
-        if cpu is not None:
-            lines.append(f"- CPU: {cpu}%")
+        out["memory_mb"], out["cpu_pct"] = use["memory_mb"], use["cpu_pct"]
+        if use["memory_mb"] is not None and plan and plan.get("ram_gb"):
+            out["memory_pct"] = round(100 * use["memory_mb"] / (plan["ram_gb"] * 1024), 1)
     except LiaraError as e:
-        lines.append(f"- ⚠️ {e.friendly}")
+        out["error"] = e.friendly
     pr = await probe(default_url(app), n=1, timeout=8)
-    st = pr["statuses"][0] if pr["statuses"] else None
-    lines.append(f"- HTTP: {'✅' if pr['healthy'] else '❌'} {st or pr['errors'][:1]} · {pr['median_ms'] or '-'}ms")
-    watch = ctx.state.get("watch") or {}
-    lines.append(f"- پایش خودکار: {'فعال ✅' if app in watch else 'غیرفعال'}")
-    lines.append(f"\n_به‌روزرسانی: {time.strftime('%H:%M:%S')}_")
-    return "\n".join(lines)
+    out["http_status"] = pr["statuses"][0] if pr["statuses"] else None
+    out["http_ok"] = pr["healthy"]
+    out["latency_ms"] = pr["median_ms"]
+    return out
 
 
 async def refresh_sidebar():
@@ -245,21 +259,23 @@ async def refresh_sidebar():
         return
     apps = list((ctx.state.get("watch") or {}).keys()) or ([ctx.state["last_app"]] if ctx.state.get("last_app")
                                                          else [])
-    if not apps:
-        return
-    parts = []
+    statuses = []
     for app in apps[:3]:
         try:
-            parts.append(await asyncio.wait_for(status_markdown(ctx, app), 30))
+            statuses.append(await asyncio.wait_for(app_status(ctx, app), 30))
         except Exception as e:  # noqa: BLE001
-            parts.append(f"## {app}\n- ⚠️ {e}")
-    audit = ctx.state["audit"].tail(5)
-    if audit:
-        parts.append("## 🧾 آخرین عملیات\n" + "\n".join(
-            f"- {a.get('ts', '')[11:16]} `{a.get('tool')}` · {a.get('status')} · {a.get('approved_by')}"
-            for a in reversed(audit)))
-    await cl.ElementSidebar.set_title("وضعیت سرویس")
-    await cl.ElementSidebar.set_elements([cl.Text(name="status", content="\n\n".join(parts))])
+            statuses.append({"name": app, "error": str(e)})
+    audit = []
+    for a in reversed(ctx.state["audit"].tail(6)):
+        spec = REGISTRY.get(a.get("tool"))
+        audit.append({"time": (a.get("ts") or "")[11:16], "tool": a.get("tool"),
+                      "title": spec.title_fa if spec else a.get("tool"),
+                      "status": a.get("status"), "by": a.get("approved_by")})
+    if not statuses:  # open the side panel only once there is an app to show (keeps mobile welcome clear)
+        return
+    await cl.ElementSidebar.set_title(f"{TEAM} · وضعیت سرویس")
+    await cl.ElementSidebar.set_elements([cl.CustomElement(
+        name="StatusPanel", props={"apps": statuses, "audit": audit, "updated": time.strftime("%H:%M:%S")})])
 
 
 # ------------------------------------------------------------------ monitoring
@@ -303,14 +319,11 @@ async def monitor_tick():
         _mlog(f"{app}: healthy={h['healthy']} issues={[i['id'] for i in found]} metrics={h['metrics']}")
         if found and time.time() - alerts.get(app, 0) > 600:
             alerts[app] = time.time()
-            issues = "؛ ".join(i["title_fa"] for i in found)
-            icon = "🚨" if any(i["severity"] == "critical" for i in found) else "⚠️"
-            await cl.Message(
-                content=f"{icon} **هشدار پایش — {app}**\n\n{issues}",
-                actions=[cl.Action(name="diagnose", payload={"app": app, "issues": issues},
-                                   label="🔍 عیب‌یابی کن")],
-                author="Monitor",
-            ).send()
+            severity = "critical" if any(i["severity"] == "critical" for i in found) else "warning"
+            await cl.Message(content="", author="Monitor", elements=[cl.CustomElement(
+                name="AlertCard", display="inline",
+                props={"app": app, "severity": severity, "time": time.strftime("%H:%M"),
+                       "issues": [{"title": i["title_fa"]} for i in found]})]).send()
             _mlog(f"{app}: alert sent")
     await refresh_sidebar()
 

@@ -1,21 +1,177 @@
-/* Persian (RTL) layout for chat content; code stays LTR */
-@import url("https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;600;700&display=swap");
+/* Human in the Liara — Liara Ops Assistant
+   Design system: design-system/human-in-the-liara/MASTER.md (Minimalism & Swiss Style,
+   trust blue #2563EB + orange CTA #EA580C, Plus Jakarta Sans + Vazirmatn for Persian). */
 
-body, .prose, textarea, button { font-family: "Vazirmatn", Tahoma, sans-serif; }
-
-.prose, .message-content, [class*="markdown"] {
-  direction: rtl;
-  text-align: right;
+:root {
+  --hil-primary: #2563eb;
+  --hil-cta: #ea580c;
+  --hil-cta-hover: #f97316; /* lighter on hover keeps dark text >= 4.5:1 */
+  --hil-fg: #1e293b;
+  --hil-muted-fg: #475569;
+  --hil-border: #e2e8f0;
+  --hil-surface: #ffffff;
+  --hil-subtle: #f1f5f9;
+  --hil-ok-fg: #15803d;   --hil-ok-bg: #dcfce7;
+  --hil-warn-fg: #b45309; --hil-warn-bg: #fef3c7;
+  --hil-crit-fg: #b91c1c; --hil-crit-bg: #fee2e2;
+  --hil-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --hil-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+  --hil-radius: 12px;
+  --hil-ease: 200ms ease;
+}
+.dark {
+  --hil-primary: #60a5fa;
+  --hil-cta: #fb923c;
+  --hil-cta-hover: #f97316;
+  --hil-fg: #f1f5f9;
+  --hil-muted-fg: #94a3b8;
+  --hil-border: #1e293b;
+  --hil-surface: #111a2e;
+  --hil-subtle: #0f172a;
+  --hil-ok-fg: #86efac;   --hil-ok-bg: rgba(34, 197, 94, 0.14);
+  --hil-warn-fg: #fcd34d; --hil-warn-bg: rgba(245, 158, 11, 0.14);
+  --hil-crit-fg: #fca5a5; --hil-crit-bg: rgba(239, 68, 68, 0.16);
+  --hil-shadow-sm: none;
+  --hil-shadow-md: none;
 }
 
-.prose pre, .prose code, pre, code {
-  direction: ltr;
-  text-align: left;
-}
-
-textarea#chat-input, #chat-input {
-  direction: rtl;
-  text-align: right;
-}
-
+/* ---------- base / RTL ---------- */
+body { font-family: var(--font-sans); font-feature-settings: "ss01"; -webkit-font-smoothing: antialiased; }
+.prose, .message-content, [class*="markdown"] { direction: rtl; text-align: right; line-height: 1.85; }
 .prose ul, .prose ol { padding-right: 1.25rem; padding-left: 0; }
+.prose table { direction: rtl; }
+.prose pre, .prose code, pre, code, kbd { direction: ltr; text-align: left; font-family: var(--font-mono); }
+textarea#chat-input, #chat-input { direction: rtl; text-align: right; font-size: 16px; }
+img.logo { width: min(420px, 86vw) !important; height: auto; }
+
+/* clickable things & focus */
+button, [role="button"], a, summary, .cursor-pointer { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+:focus-visible { outline: 2px solid var(--hil-primary); outline-offset: 2px; border-radius: 6px; }
+
+/* starters: calmer, clearer cards */
+#starters button, #starters > * {
+  border-radius: 999px; transition: background-color var(--hil-ease), border-color var(--hil-ease), color var(--hil-ease);
+}
+
+/* ---------- shared card ---------- */
+.hil-card {
+  background: var(--hil-surface); color: var(--hil-fg);
+  border: 1px solid var(--hil-border); border-radius: var(--hil-radius);
+  box-shadow: var(--hil-shadow-sm); padding: 16px; display: flex; flex-direction: column; gap: 12px;
+  max-width: 640px; font-family: var(--font-sans); line-height: 1.7; text-align: right;
+}
+.hil-card-head { display: flex; align-items: center; gap: 12px; }
+.hil-head-text { flex: 1; min-width: 0; }
+.hil-title { font-weight: 700; font-size: 15px; color: var(--hil-fg); overflow-wrap: anywhere; }
+.hil-eyebrow { font-size: 12px; color: var(--hil-muted-fg); font-weight: 500; }
+.hil-muted { font-size: 13px; color: var(--hil-muted-fg); margin: 0; }
+.hil-label { font-size: 12px; font-weight: 600; color: var(--hil-muted-fg); margin-bottom: 2px; }
+.hil-icon {
+  width: 36px; height: 36px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center;
+  flex: none; background: var(--hil-warn-bg); color: var(--hil-warn-fg);
+}
+.hil-risk-high .hil-icon { background: var(--hil-crit-bg); color: var(--hil-crit-fg); }
+.hil-icon-neutral, .hil-secret .hil-icon { background: var(--hil-subtle); color: var(--hil-primary); }
+.hil-risk-high { border-inline-start: 4px solid var(--hil-crit-fg); }
+.hil-risk-medium { border-inline-start: 4px solid var(--hil-warn-fg); }
+
+.hil-badge, .hil-pill {
+  display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
+  font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 999px; line-height: 20px;
+}
+.hil-badge-medium { background: var(--hil-warn-bg); color: var(--hil-warn-fg); }
+.hil-badge-high { background: var(--hil-crit-bg); color: var(--hil-crit-fg); }
+.hil-pill-on { background: var(--hil-ok-bg); color: var(--hil-ok-fg); }
+.hil-pill-off, .hil-pill-bad { background: var(--hil-crit-bg); color: var(--hil-crit-fg); }
+.hil-pill-unknown { background: var(--hil-subtle); color: var(--hil-muted-fg); }
+
+/* ---------- approval card ---------- */
+.hil-action { margin: 0; font-size: 15px; font-weight: 600; }
+.hil-reason { background: var(--hil-subtle); border-radius: 10px; padding: 10px 12px; }
+.hil-reason p { margin: 0; font-size: 14px; }
+.hil-impact { display: grid; grid-template-columns: 1fr; gap: 8px; margin: 0; }
+@media (min-width: 640px) { .hil-impact { grid-template-columns: 1fr 1fr; } }
+.hil-impact-row { border: 1px solid var(--hil-border); border-radius: 10px; padding: 8px 10px; }
+.hil-impact-row dt { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--hil-muted-fg); }
+.hil-impact-row dd { margin: 2px 0 0; font-size: 13px; overflow-wrap: anywhere; }
+.hil-link {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; background: none; border: 0;
+  padding: 2px 0; font-size: 13px; color: var(--hil-primary); font-weight: 600; transition: color var(--hil-ease);
+}
+.hil-link:hover { text-decoration: underline; }
+.hil-link svg { transition: transform var(--hil-ease); }
+.hil-rot { transform: rotate(180deg); }
+.hil-code {
+  margin: 0; max-height: 220px; overflow: auto; font-size: 12px; background: var(--hil-subtle);
+  border: 1px solid var(--hil-border); border-radius: 10px; padding: 10px 12px; white-space: pre-wrap; word-break: break-word;
+}
+.hil-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.hil-actions button { gap: 6px; min-height: 40px; padding-inline: 18px; font-weight: 600; transition: background-color var(--hil-ease), border-color var(--hil-ease), color var(--hil-ease); }
+.hil-btn-approve, .hil-btn-primary { background: var(--hil-cta) !important; color: #0b0b0b !important; border: 0; }
+.hil-btn-approve:hover, .hil-btn-primary:hover { background: var(--hil-cta-hover) !important; }
+.hil-decision {
+  display: inline-flex; align-items: center; gap: 6px; align-self: flex-start;
+  font-size: 13px; font-weight: 600; border-radius: 999px; padding: 4px 12px;
+}
+.hil-decision.hil-ok { background: var(--hil-ok-bg); color: var(--hil-ok-fg); }
+.hil-decision.hil-no { background: var(--hil-subtle); color: var(--hil-muted-fg); }
+
+/* ---------- secret input ---------- */
+.hil-secret code { background: var(--hil-subtle); padding: 1px 6px; border-radius: 6px; font-size: 13px; }
+.hil-secret-row { display: flex; gap: 8px; align-items: center; }
+.hil-secret-row .hil-input { flex: 1; font-family: var(--font-mono); font-size: 16px; min-height: 42px; }
+.hil-icon-btn {
+  width: 42px; height: 42px; border-radius: 10px; border: 1px solid var(--hil-border); background: var(--hil-surface);
+  color: var(--hil-muted-fg); display: inline-flex; align-items: center; justify-content: center; flex: none;
+  transition: border-color var(--hil-ease), color var(--hil-ease);
+}
+.hil-icon-btn:hover { border-color: var(--hil-primary); color: var(--hil-primary); }
+
+/* ---------- alert ---------- */
+.hil-list { margin: 0; padding-inline-start: 18px; font-size: 14px; }
+.hil-list li { margin: 2px 0; }
+
+/* ---------- status panel ---------- */
+.hil-panel { display: flex; flex-direction: column; gap: 12px; padding: 4px 2px 16px; font-family: var(--font-sans); }
+.hil-panel .hil-card { max-width: none; gap: 10px; padding: 14px; }
+.hil-team {
+  display: inline-flex; align-items: center; gap: 6px; align-self: flex-start;
+  font-size: 12px; font-weight: 600; color: var(--hil-primary); background: var(--hil-subtle);
+  border: 1px solid var(--hil-border); border-radius: 999px; padding: 3px 10px;
+}
+.hil-meter { display: flex; flex-direction: column; gap: 6px; }
+.hil-meter-top, .hil-kv { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.hil-meter-label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--hil-muted-fg); font-weight: 500; }
+.hil-meter-value { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.hil-bar { height: 8px; border-radius: 999px; background: var(--hil-subtle); overflow: hidden; }
+.hil-bar-fill { height: 100%; border-radius: 999px; transition: width 300ms ease; }
+.hil-bar-fill.hil-ok { background: var(--hil-primary); }
+.hil-bar-fill.hil-warn { background: #f59e0b; }
+.hil-bar-fill.hil-crit { background: #dc2626; }
+.hil-section-title { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 14px; }
+.hil-timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.hil-timeline li {
+  display: grid; grid-template-columns: 10px 1fr auto; grid-template-areas: "dot title time" "dot status status";
+  column-gap: 8px; align-items: center; font-size: 13px;
+}
+.hil-tl-dot { grid-area: dot; width: 8px; height: 8px; border-radius: 50%; background: var(--hil-primary); }
+.hil-tl-error .hil-tl-dot, .hil-tl-blocked .hil-tl-dot { background: #dc2626; }
+.hil-tl-rejected .hil-tl-dot { background: #94a3b8; }
+.hil-tl-title { grid-area: title; font-weight: 600; }
+.hil-tl-meta { grid-area: time; color: var(--hil-muted-fg); font-size: 12px; font-variant-numeric: tabular-nums; }
+.hil-tl-status { grid-area: status; font-size: 12px; color: var(--hil-muted-fg); }
+.hil-tl-status-error, .hil-tl-status-blocked { color: var(--hil-crit-fg); }
+.hil-updated { font-size: 12px; color: var(--hil-muted-fg); margin: 0; }
+
+/* ---------- motion & small screens ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0ms !important; animation-duration: 0ms !important; }
+}
+@media (max-width: 480px) {
+  .hil-card { padding: 12px; }
+  .hil-actions button { flex: 1; }
+}
+
+/* tool-step headers ("انجام شد: …") read right-to-left */
+button[id^="step-"] { direction: rtl; }

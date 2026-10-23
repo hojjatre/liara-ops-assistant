@@ -15,8 +15,8 @@ from . import packager
 TERMINAL = {"READY", "FAILED", "UNHEALTHY", "TIMEDOUT", "CANCELED"}
 STATE_FA = {
     "QUEUED": "در صف ساخت", "BUILDING": "در حال ساخت (build)", "PUSHING": "در حال ارسال image",
-    "PUSHED": "image ارسال شد", "DEPLOYING": "در حال استقرار", "READY": "آماده ✅", "FAILED": "ناموفق ❌",
-    "UNHEALTHY": "ناسالم (health check رد شد) ❌", "TIMEDOUT": "زمان ساخت تمام شد ❌", "CANCELED": "لغو شد",
+    "PUSHED": "image ارسال شد", "DEPLOYING": "در حال استقرار", "READY": "آماده", "FAILED": "ناموفق",
+    "UNHEALTHY": "ناسالم (health check رد شد)", "TIMEDOUT": "زمان ساخت تمام شد", "CANCELED": "لغو شد",
 }
 
 
@@ -50,18 +50,18 @@ async def deploy(ctx, app: str, path: str, platform: str | None = None, port: in
     platform = platform or info["platform"]
     port = port or info["port"]
 
-    await ctx.report(f"📦 بسته‌بندی سورس ({info['files']} فایل، پلتفرم {platform}، پورت {port})")
+    await ctx.report(f"بسته‌بندی سورس ({info['files']} فایل، پلتفرم {platform}، پورت {port})")
     archive = packager.make_archive(p)
     size_mb = round(archive.stat().st_size / 1024 / 1024, 2)
     try:
-        await ctx.report(f"⬆️ آپلود سورس ({size_mb}MB)")
+        await ctx.report(f"آپلود سورس ({size_mb}MB)")
         source_id = await ctx.client.upload_source(app, archive)
     finally:
         archive.unlink(missing_ok=True)
 
     body = release_body(p, platform, port, message)
     body["sourceID"] = source_id
-    await ctx.report("🚀 ساخت release جدید")
+    await ctx.report("ساخت release جدید")
     release_id = await ctx.client.create_release(app, body)
     ctx.state.setdefault("releases", {})[app] = release_id
 
@@ -98,15 +98,15 @@ async def track_release(ctx, release_id: str, timeout_sec: int = 900, poll_sec: 
             build_lines.append(line)
         if outputs:
             since = outputs[-1].get("createdAt") or since
-            await ctx.report(f"🔨 {build_lines[-1][:160]}")
+            await ctx.report(f"build: {build_lines[-1][:160]}")
         state = release.get("state") or state
         fail_reason = release.get("failReason") or fail_reason
         if state and state != last_state:
-            await ctx.report(f"📍 وضعیت: {STATE_FA.get(state, state)}")
+            await ctx.report(f"وضعیت: {STATE_FA.get(state, state)}")
             last_state = state
         if error_lines:  # the CLI treats any non-STDOUT build output as a failed build
             state = "FAILED"
-            await ctx.report(f"📍 وضعیت: {STATE_FA['FAILED']}")
+            await ctx.report(f"وضعیت: {STATE_FA['FAILED']}")
             break
         if state in TERMINAL and not outputs:
             break

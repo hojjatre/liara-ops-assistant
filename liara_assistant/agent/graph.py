@@ -1,7 +1,7 @@
 """LangGraph agent: agent -> review (human-in-the-loop) -> tools -> agent.
 
 * `agent`  : the LLM decides what to do and may request tools.
-* `review` : for every requested 🟡/🔴 tool, builds an approval card and pauses the graph with
+* `review` : for every requested medium/high-risk tool, builds an approval card and pauses the graph with
              `interrupt()`. The UI shows the cards and resumes with {tool_call_id: {approved, note}}.
              This node has no side effects, so re-running it on resume is safe.
 * `tools`  : executes auto-approved and user-approved tools, refuses blocked/rejected ones, writes the

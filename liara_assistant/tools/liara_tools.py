@@ -501,7 +501,7 @@ async def create_app(
                 "available_bundles": list(plan["bundles"])}
     net, _ = await _pick_network(ctx, network)
     if net is None:
-        await ctx.report("🌐 ساخت شبکه خصوصی برای برنامه")
+        await ctx.report("ساخت شبکه خصوصی برای برنامه")
         await ctx.client.create_network(network or "default-net")
         net, _ = await _pick_network(ctx, network or "default-net")
     res = await ctx.client.create_app(name, plan_id, platform, bundle_plan_id, network=(net or {}).get("_id"))
@@ -567,7 +567,7 @@ async def resize_app(ctx: Ctx, app: App, plan_id: Annotated[str, Field(descripti
 @tool(Risk.HIGH, "بازگشت به release قبلی",
       impact=lambda ctx, a: _const({"downtime": "جابه‌جایی کوتاه نسخه",
                                     "rollback": "release فعلی در تاریخچه می‌ماند",
-                                    "note": "این endpoint در OpenAPI رسمی لیارا نیست (⚠️)؛ اگر خطا داد، سورس "
+                                    "note": "این endpoint در OpenAPI رسمی لیارا نیست؛ اگر خطا داد، سورس "
                                             "نسخه قبلی را دوباره دیپلوی کنید"}),
       describe=lambda a: f"بازگشت «{a.get('app')}» به release {a.get('release_id')}")
 async def rollback_release(ctx: Ctx, app: App, release_id: Annotated[str, Field(description="Previous READY "

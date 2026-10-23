@@ -5,7 +5,8 @@ __pycache__/
 .pytest_cache/
 /data/
 .files/
-.chainlit/translations/
+.chainlit/translations/*
+!.chainlit/translations/fa.json
 *.tar.gz
 node_modules/
 .idea/

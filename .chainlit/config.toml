@@ -114,13 +114,13 @@ reaction_on_message_received = false
 
 [UI]
 # Name of the assistant.
-name = "Liara Assistant"
+name = "Liara Ops Assistant"
 
-# default_theme = "dark"
+default_theme = "light"
 
 # Force a specific language for all users (e.g., "en-US", "he-IL", "fr-FR")
 # If not set, the browser's language will be used
-# language = "en-US"
+language = "fa"
 
 layout = "wide"
 
@@ -136,7 +136,7 @@ layout = "wide"
 confirm_new_chat = true
 
 # Description of the assistant. This is used for HTML tags.
-description = "دستیار هوشمند راه‌اندازی، دیپلوی و پایش وب‌سایت روی لیارا"
+description = "Human in the Liara — دستیار هوشمند راه‌اندازی، دیپلوی و پایش وب‌سایت روی لیارا"
 
 # Chain of Thought (CoT) display mode. Can be "hidden", "tool_call" or "full".
 cot = "full"
@@ -186,6 +186,13 @@ default_avatar_file_url = ""
 # custom_build = "./public/build"
 
 # Specify optional one or more custom links in the header.
+[[UI.header_links]]
+    name = "Human in the Liara"
+    display_name = "Human in the Liara"
+    icon_url = "/public/icons/github.svg"
+    url = "https://github.com/hojjatre/liara-ops-assistant"
+    target = "_blank"
+
 # [[UI.header_links]]
 #     name = "Issues"
 #     display_name = "Report Issue"

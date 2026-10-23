@@ -121,10 +121,10 @@ def _baseline(ev: dict, signals: list[dict]) -> dict:
 
 
 async def diagnose(ctx, app: str, symptom: str = "", minutes: int = 60, url: str | None = None) -> dict:
-    await ctx.report(f"🔎 جمع‌آوری شواهد برای «{app}» (وضعیت، release‌ها، رویدادها، لاگ‌ها، متریک‌ها، تست HTTP)")
+    await ctx.report(f"جمع‌آوری شواهد برای «{app}» (وضعیت، release‌ها، رویدادها، لاگ‌ها، متریک‌ها، تست HTTP)")
     ev = await ev_mod.collect(ctx, app, minutes=minutes, url=url)
     sigs = sig_mod.extract(ev)
-    await ctx.report(f"🧩 {len([s for s in sigs if not s['id'].startswith('_')])} نشانه استخراج شد")
+    await ctx.report(f"{len([s for s in sigs if not s['id'].startswith('_')])} نشانه استخراج شد")
     plans = (ctx.state.get("cache", {}).get("plans") or (0, []))[1]
     hyps = hypotheses(sigs, ev, plans)
     base = _baseline(ev, sigs)
@@ -168,7 +168,7 @@ async def verify(ctx, app: str, url: str | None = None, settle_sec: int = 30) ->
     """Re-check after a fix and compare with the saved baseline."""
     base = (ctx.state.get("baselines") or {}).get(app)
     since = (ctx.state.get("last_action_ts") or {}).get(app) or (base or {}).get("ts") or time.time() - 600
-    await ctx.report("⏳ صبر برای پایدار شدن سرویس...")
+    await ctx.report("صبر برای پایدار شدن سرویس...")
     deadline = time.time() + 180
     info = {}
     while time.time() < deadline:
@@ -181,7 +181,7 @@ async def verify(ctx, app: str, url: str | None = None, settle_sec: int = 30) ->
             pass
         await _sleep(5)
     await _sleep(settle_sec)
-    await ctx.report("🧪 تست مجدد HTTP، متریک‌ها و لاگ‌های بعد از اقدام")
+    await ctx.report("تست مجدد HTTP، متریک‌ها و لاگ‌های بعد از اقدام")
     pr = await probe(url or default_url(app), n=3)
     minutes = max(1, int((time.time() - since) / 60) + 1)
     ev = await ev_mod.collect(ctx, app, minutes=minutes, url=url)
@@ -204,11 +204,11 @@ async def verify(ctx, app: str, url: str | None = None, settle_sec: int = 30) ->
     healthy_http = pr["healthy"]
     resources_ok = (mem_pct or 0) < 85 and (cpu_pct or 0) < 90
     if healthy_http and not new_errors and resources_ok:
-        verdict, verdict_fa = "fixed", "✅ مشکل برطرف شد"
+        verdict, verdict_fa = "fixed", "مشکل برطرف شد"
     elif healthy_http and (new_errors or not resources_ok):
-        verdict, verdict_fa = "partial", "⚠️ سایت پاسخ می‌دهد ولی هنوز نشانه مشکل هست"
+        verdict, verdict_fa = "partial", "سایت پاسخ می‌دهد ولی هنوز نشانه مشکل هست"
     else:
-        verdict, verdict_fa = "not_fixed", "❌ مشکل برطرف نشد — فرضیه بعدی را بررسی کنید"
+        verdict, verdict_fa = "not_fixed", "مشکل برطرف نشد — فرضیه بعدی را بررسی کنید"
     return {"app": app, "verdict": verdict, "verdict_fa": verdict_fa, "before": base, "after": after,
             "app_running": info.get("running"), "top_new_errors": sig_mod.top_errors(new_logs, 3),
             "unavailable_sources": ev["unavailable"]}

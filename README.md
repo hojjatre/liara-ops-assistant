@@ -1,7 +1,7 @@
 # Liara Ops Assistant · دستیار لیارا
 
 **An AI teammate that sets up, deploys, monitors and troubleshoots websites on [Liara](https://liara.ir).**
-Built for the StarCoach Agentic AI hackathon, Liara challenge, by team **Human in the Loop**.
+Built for the StarCoach Agentic AI hackathon, Liara challenge, by team **Human in the Liara**.
 
 > **خلاصه فارسی:** دستیاری گفت‌وگومحور (فارسی) که با API واقعی لیارا پروژه را تحلیل و دیپلوی می‌کند، پلن مناسب
 > پیشنهاد می‌دهد، وضعیت و منابع (رم، CPU، دیسک)، لاگ‌ها و رویدادها را پایش می‌کند، و برای خطاهایی مثل ۵۰۰ یا کندی
@@ -22,6 +22,21 @@ Built for the StarCoach Agentic AI hackathon, Liara challenge, by team **Human i
 | **Monitoring** | «این برنامه را زیر نظر بگیر» | Background health checks (HTTP probe, RAM/CPU % of plan, disk, errors, restarts); alerts in chat with a one-click «🔍 عیب‌یابی کن» |
 | **Troubleshooting** | «سایتم خطای ۵۰۰ می‌دهد» / «سایتم کند شده» | Collects evidence in parallel → extracts signals with rules → ranks hypotheses with confidence and evidence → proposes a fix → **asks for approval** → executes → **verifies before/after** |
 | **Domains** | «دامنه example.ir را وصل کن» | Liara DNS zone, exact nameservers for nic.ir (manual step), record creation, domain check, SSL |
+
+## User interface
+
+The chat UI follows a design system generated with [UI UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill)
+(`design-system/human-in-the-liara/MASTER.md`, with chat-page overrides in `pages/chat.md`): Minimalism & Swiss style,
+trust blue `#2563EB` with an orange call-to-action `#EA580C`, Plus Jakarta Sans + Vazirmatn (Persian, RTL), light theme
+by default, Lucide icons only (no emoji icons), visible focus states and reduced-motion support.
+
+| Element | What the user sees |
+|---|---|
+| Welcome screen | Team logo (**Human in the Liara**) and four quick-start actions |
+| `ApprovalCard` | Risk badge, the exact action, why (evidence), downtime, monthly cost change, how to undo, collapsible API details, **Approve / Reject** |
+| `SecretInput` | Private password-style field for secrets: the value goes to Liara only, never to the chat, the LLM or the logs |
+| `StatusPanel` (side panel) | Per-app RAM/CPU meters, HTTP status and latency, monitoring state, and a timeline of recent audited operations |
+| `AlertCard` | Proactive monitoring alert with a one-click **عیب‌یابی کن** (diagnose) |
 
 ## Architecture
 
